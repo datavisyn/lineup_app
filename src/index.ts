@@ -10,7 +10,7 @@ import './style.scss';
 import 'typeface-roboto/index.css';
 import initExport from './export';
 import shared from './shared';
-import {IDataset, fromFile, allDatasets, ISession, PRELOADED_TYPE, createCard} from './data';
+import {IDataset, fromFile, allDatasets, checkFiles, ISession, PRELOADED_TYPE, createCard} from './data';
 import {storeDataset, storeSession, deleteDataset, editDataset} from './data/db';
 import {saveDialog, areyousure} from './ui';
 
@@ -205,15 +205,45 @@ function recreateCard(dataset: IDataset) {
   markCarouselForRefresh(shared.datasets!.indexOf(dataset));
 }
 
+function handleFileList(files: FileList) {
+  switch(files.length) {
+    case 0:
+      toast({html: `No file selected!`, displayLength: 5000});
+      break;
+    case 1:
+      showFile(files[0]);
+      break;
+    case 2:
+      checkFiles(Array.from(files))
+        .then((dataset) => {
+          showDataset(dataset);
+        })
+        .catch((error) => {
+          toast({html: `<pre>${error}</pre>`, displayLength: 5000});
+        });
+      break;
+    default:
+      toast({html: `Too many files selected! Choose 1 or 2 files only.`, displayLength: 5000});
+  }
+}
+
 function showFile(file: File) {
+  fromFile(file)
+    .then((dataset) => {
+      showDataset(dataset);
+    })
+    .catch((error) => {
+      toast({html: `<pre>${error}</pre>`, displayLength: 5000});
+    });
+}
+
+function showDataset(dataset: IDataset) {
   reset();
-  const f = fromFile(file).then((r) => {
-    shared.datasets.push(r);
-    addToCarousel(r);
-    refreshCarousel();
-    return storeDataset(r).then(() => r);
-  });
-  build(f);
+  shared.datasets.push(dataset);
+  addToCarousel(dataset);
+  refreshCarousel();
+  storeDataset(dataset);
+  build(Promise.resolve(dataset));
 }
 
 async function saveSession() {
@@ -290,7 +320,7 @@ allDatasets().then((data) => {
   {
     const file = document.querySelector<HTMLInputElement>('input[type=file]')!;
     file.addEventListener('change', () => {
-      showFile(file.files![0]);
+      handleFileList(file.files!);
     }
     );
     document.querySelector<HTMLElement>('#dropper a.btn')!.addEventListener('click', (evt) => {
@@ -305,10 +335,7 @@ allDatasets().then((data) => {
     }
     );
     uploader.addEventListener('drop', (evt) => {
-      if (evt.dataTransfer!.files.length !== 1) {
-        return;
-      }
-      showFile(evt.dataTransfer!.files[0]);
+      handleFileList(evt.dataTransfer!.files!);
       evt.preventDefault();
     }
     );

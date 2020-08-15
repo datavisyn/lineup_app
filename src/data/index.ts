@@ -59,9 +59,30 @@ export function fromFile(file: File): Promise<IDataset> {
       return loader.loadFile(file).then(complete);
     }
   }
-  return Promise.reject(`unknown file type: ${file.name}`);
+  return Promise.reject(`Unknown file type: ${file.name}`);
 }
 
+export function checkFiles(files: File[]): Promise<IDataset> {
+  const jsonFile = files.filter((f) => JSON_LOADER.supports(f));
+  const csvFile = files.filter((f) => CSV_LOADER.supports(f));
+
+  if(jsonFile.length !== 1 || csvFile.length !== 1) {
+    return Promise.reject('Wrong file types! Requires config JSON *and* dataset as CSV file.');
+  }
+
+  return Promise.all([
+      JSON_LOADER.loadFile(jsonFile[0]),
+      CSV_LOADER.loadFile(csvFile[0])
+    ])
+    .then((d) => {
+      const jsonDataset = d[0];
+      const csvDataset = d[1];
+      // merge the JSON dump (ranking configuration) with the raw CSV data
+      jsonDataset.rawData = csvDataset.rawData;
+      return jsonDataset; // use the merged JSON dataset
+    })
+    .then(complete);
+}
 
 export function allDatasets() {
   return Promise.all([listDatasets(), listSessions()]).then(([ds, sessions]) => {
