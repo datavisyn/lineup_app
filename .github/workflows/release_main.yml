@@ -1,0 +1,64 @@
+name: Release Main
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  correct_repository:
+    runs-on: ubuntu-latest
+    steps:
+      - name: fail on fork
+        if: github.repository_owner != 'lineupjs'
+        run: exit 1
+
+  create_release:
+    needs: correct_repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+      - name: Extract version
+        id: extract_version
+        run: node -pe "'::set-output name=version::' + require('./package.json').version"
+      - name: Create Release
+        id: create_release
+        uses: release-drafter/release-drafter@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.PRIVATE_GITHUB_TOKEN }}
+        with:
+          version: ${{ steps.extract_version.outputs.version }}
+          publish: true
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      tag_name: ${{ steps.create_release.outputs.tag_name }}
+
+  sync_dev:
+    needs: correct_repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+        with:
+          ref: develop
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Reset develop branch
+        run: |
+          git fetch origin main:main
+          git reset --hard main
+      - name: Create pull request into develop
+        uses: peter-evans/create-pull-request@v3
+        with:
+          branch: bot/sync-main-dev
+          commit-message: 'chore: sync main-dev'
+          base: develop
+          title: 'chore: sync main->dev'
+          labels: chore
+          reviewers: sgratzl
+          assignees: sgratzl
+          body: |
+            Syncing Main->Dev.
